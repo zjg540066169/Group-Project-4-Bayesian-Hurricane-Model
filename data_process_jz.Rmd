@@ -1,0 +1,238 @@
+---
+title: "Data_process_JZ"
+author: "Jungang Zou"
+date: "5/7/2020"
+output: pdf_document
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(psych)
+library(coda)
+set.seed(123)
+```
+
+## Read data
+
+```{r }
+dt = read.csv("./hurrican356.csv") %>% 
+  janitor::clean_names() %>% select(-x) %>% 
+  mutate(time = as.POSIXct(time, format = "(%y-%m-%d %H:%M:%S)"), 
+         day = yday(time) - 1,
+         id = as.character(id),
+         ) %>% 
+  separate(id, into = c("hurrican", "calenda_year"), remove = F) %>% 
+  mutate(calenda_year = as.integer(calenda_year),
+         hurrican_type = as.factor(hurrican)
+         ) %>% 
+  group_by(id) %>% 
+  mutate(hour = time - time[1],
+         calenda_year = as.integer(as.factor(calenda_year))
+         )
+
+units(dt$hour) <- "hours"
+dt = dt %>% 
+  mutate(
+    hour = as.integer(hour),
+    nature = as.integer(nature)
+    ) %>% 
+  ungroup() %>% 
+  filter(hour %% 6 == 0)
+         
+        
+hurrican = filter(dt, hurrican == "ALLISON")
+```
+
+## Data Process
+
+
+
+```{r }
+
+data_process = function(hurrican){
+  #hurrican = mutate(hurrican, ) 
+  y_plus_6_1 = group_by(hurrican, calenda_year) %>% slice(3:n()) %>% ungroup() %>% select(latitude) %>% rename(y_plus_6_1 = latitude)
+  y_plus_6_2 = group_by(hurrican, calenda_year) %>% slice(3:n()) %>% ungroup() %>% select(longitude) %>% rename(y_plus_6_2 = longitude)
+  y_plus_6_3 = group_by(hurrican, calenda_year) %>% slice(3:n()) %>% ungroup() %>% select(wind_kt) %>% rename(y_plus_6_3 = wind_kt)
+  
+  y_1 = group_by(hurrican, calenda_year) %>% slice(2:(n() - 1)) %>% ungroup() %>% select(latitude) %>% rename(y_1 = latitude)
+  y_2 = group_by(hurrican, calenda_year) %>% slice(2:(n() - 1)) %>% ungroup() %>% select(longitude) %>% rename(y_2 = longitude)
+  y_3 = group_by(hurrican, calenda_year) %>% slice(2:(n() - 1)) %>% ungroup() %>% select(wind_kt) %>% rename(y_3 = wind_kt)
+  
+  y_minus_6_1 = group_by(hurrican, calenda_year) %>% slice(1:(n() - 2)) %>% ungroup() %>% select(latitude) %>% rename(y_minus_6_1 = latitude)
+  y_minus_6_2 = group_by(hurrican, calenda_year) %>% slice(1:(n() - 2)) %>% ungroup() %>% select(longitude) %>% rename(y_minus_6_2 = longitude)
+  y_minus_6_3 = group_by(hurrican, calenda_year) %>% slice(1:(n() - 2)) %>% ungroup() %>% select(wind_kt) %>% rename(y_minus_6_3 = wind_kt)
+  
+  delta_1 = (y_1 - y_minus_6_1) %>% rename(delta_1 = y_1)
+  delta_2 = (y_2 - y_minus_6_2) %>% rename(delta_2 = y_2)
+  delta_3 = (y_3 - y_minus_6_3) %>% rename(delta_3 = y_3)
+  
+  x_1 = group_by(hurrican, calenda_year) %>% slice(2:(n() - 1)) %>% ungroup() %>% select(day) %>% rename(x_1 = day)
+  x_2 = group_by(hurrican, calenda_year) %>% slice(2:(n() - 1)) %>% ungroup() %>% select(calenda_year) %>% rename(x_2 = calenda_year)
+  x_3 = group_by(hurrican, calenda_year) %>% slice(2:(n() - 1)) %>% ungroup() %>% select(nature) %>% rename(x_3 = nature)
+  
+  df = cbind(
+    y_1, y_2, y_3, delta_1, delta_2, delta_3, x_1, x_2, x_3, y_plus_6_1, y_plus_6_2, y_plus_6_3
+  )
+  df
+}
+
+#lr = lm(y_plus_6_2 ~ y_1 + y_2 + y_3 + delta_1 + delta_2 + delta_3 + x_1 + x_2 + x_3, data = df)
+#summary(lr)
+```
+
+```{r}
+hurrican = data_process(hurrican)
+
+```
+
+
+## MCMC
+
+```{r}
+regularMHstep <- function(hurrican, a, logp, pars){
+  new_pars = list()
+  new_pars$beta = pars$beta + 2 * (runif(length(pars$beta)) - 0.5) * a
+  new_pars$rho = pars$rho + 2 * (runif(length(pars$rho)) - 0.5) * a
+  new_pars$inv_cov = pars$inv_cov + 2 * (matrix(runif(length(pars$inv_cov)), nrow(pars$inv_cov)) - 0.5) * a
+  
+  
+  if(log(runif(1)) < log_posterior(hurrican, new_pars) - log_posterior(hurrican,pars))
+    return(new_pars)
+  else
+    return(pars)
+}
+
+
+log_posterior = function(hurrican, pars){
+  y_plus_6 = select(hurrican,  y_plus_6_1, y_plus_6_2, y_plus_6_3)
+  y_plus_6 = as.matrix(y_plus_6)
+  x1 = select(hurrican,  x_1, x_2, x_3, delta_1, delta_2, delta_3) %>% as.matrix()
+  x2 = select(hurrican,  x_1, x_2, x_3, delta_1, delta_2, delta_3) %>% as.matrix()
+  x3 = select(hurrican,  x_1, x_2, x_3, delta_1, delta_2, delta_3) %>% as.matrix()
+  x1 = cbind(1, x1)
+  x2 = cbind(1, x2)
+  x3 = cbind(1, x3)
+  
+  mu_1 = x1 %*% pars$beta[1:7]
+  mu_2 = x2 %*% pars$beta[8:14]
+  mu_3 = x3 %*% pars$beta[15:21]
+  
+  rho_y1 = select(hurrican, y_1) %>% as.matrix() * pars$rho[1]
+  rho_y2 = select(hurrican, y_2) %>% as.matrix() * pars$rho[2]
+  rho_y3 = select(hurrican, y_3) %>% as.matrix() * pars$rho[3]
+  
+  y_1 = mu_1 + rho_y1
+  y_2 = mu_2 + rho_y2
+  y_3 = mu_3 + rho_y3
+  y = cbind(y_1, y_2, y_3)
+  post = -0.5 * tr(pars$inv_cov %*% (t(y_plus_6 - y) %*% (y_plus_6 - y) + matrix(c(10, 0, 0, 0, 10, 0, 0, 0, 10), nrow = 3)))
+  post = post - 0.5 * t(pars$beta) %*% pars$beta
+  post = post - 5/2 * sum((pars$rho - 0.5)^2)
+  post
+}
+
+
+
+
+
+
+
+```
+
+```{r}
+MCMC = function(hurrican, num_samples = 10, sample_gap = 10, a = 10, pars_init, burn_in_init = 1000, burn_in_test = 300){
+    if (is.null(k))
+      k = burn_in_add
+    burn_in = burn_in_init
+    pars = pars_init
+    chain_beta <- matrix(NA, num_samples, length(pars$beta))
+    chain_rho <- matrix(NA, num_samples, length(pars$rho))
+    chain_inv_cov <- array(NA, dim = c(num_samples, nrow(pars$inv_cov), ncol(pars$inv_cov)))
+    
+    
+    for (i in 1:burn_in) {
+      pars <- regularMHstep(hurrican, a, logp = log_posterior, pars = pars)
+    }
+    
+    
+    
+    current_sample_num = 1
+    step = 1
+    chain_beta_test = mcmc.list()
+    chain_test_num = 0
+    #chain_beta_test2 <- matrix(NA, burn_in_add, length(pars$beta))
+    while(T){
+      chain_test_num = chain_test_num + 1
+      chain_mcmc <- matrix(NA, burn_in_test, length(pars$beta))
+      for (i in 1:burn_in_test * sample_gap) {
+        
+        pars <- regularMHstep(hurrican, a, logp = log_posterior, pars = pars)
+        if(i %% sample_gap == 0)
+          chain_mcmc[i %/% sample_gap,] = pars$beta
+      }
+      chain_beta_test[[chain_test_num]]=  mcmc(chain_mcmc)
+      if (chain_test_num > 2)
+        return(chain_beta_test)
+      
+      
+    }
+    
+    
+    while (current_sample_num <= num_samples){
+      pars <- regularMHstep(hurrican, a, logp = log_posterior, pars = pars)
+      #if (step >= burn_in - burn_in_add && step <= burn_in){
+       # x = c(x, pars$beta[1])
+      #}
+      #if (step == burn_in) {
+      #  b = c()
+      #  if (k == burn_in_add){
+      #    b = x
+       # }
+       # else{
+      #    gap = burn_in_add %/% k
+      #    for (j in 0:(k - 1)) {
+      #      b = c(b, mean(x[(j * gap + 1):(j * gap + (gap))]))
+      #    }
+      #  }
+        
+      #  ac = acf(b, plot = F)
+      #  corr_1lag = ac$acf[2]
+      #  nse = sqrt(1 / (k * (k - 1)) * sum((b - mean(b))^2))
+        
+      #  ciz = c(-1,1)*(-qnorm((1-alpha)/2)/sqrt(length(b)-3))
+      #  print(paste(burn_in, corr_1lag, ciz[2], nse, nse_tol))
+      #  if (corr_1lag > ciz[2] || nse > nse_tol) {
+      #    burn_in_add = burn_in_add
+      #    burn_in = burn_in + burn_in_add
+      #    x = c()
+       #   next
+      #  }
+      #}
+      #else 
+      if(step %% sample_gap == 0){
+        chain_beta[(step) %/% sample_gap, ] = pars$beta
+        chain_rho[(step) %/% sample_gap, ] = pars$rho
+        chain_inv_cov[(step) %/% sample_gap, ,] = pars$inv_cov
+        current_sample_num = current_sample_num + 1
+      }
+      
+      step = step + 1
+    }
+  return(mcmc(chain_beta))
+  
+}
+
+pars = list(
+    beta = rep(0, 21),
+    inv_cov = matrix(rep(0, 9), nrow = 3),
+    rho = rep(0, 3)
+)
+
+chain_beta = MCMC(hurrican = hurrican, pars_init = pars, burn_in_init = 10000)
+gelman.diag(chain_beta)
+length(unique(chain_beta[, 1])) / (nrow(chain_beta))
+
+acf(chain_beta[,1])
+```
