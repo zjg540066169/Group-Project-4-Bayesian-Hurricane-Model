@@ -7,9 +7,12 @@ output: pdf_document
 
 ```{r setup}
 knitr::opts_chunk$set(echo = TRUE)
-library(tidyverse)
+library(mvtnorm)
+library(lubridate)
 library(psych)
 library(coda)
+library(tidyverse)
+library(matrixcalc)
 set.seed(123)
 ```
 
@@ -93,12 +96,22 @@ hurrican = data_process(hurrican)
 ```{r}
 regularMHstep <- function(hurrican, a, logp, pars){
   new_pars = list()
-  new_pars$beta = pars$beta + 2 * (runif(length(pars$beta)) - 0.5) * a
-  new_pars$rho = pars$rho + 2 * (runif(length(pars$rho)) - 0.5) * a
-  new_pars$inv_cov = pars$inv_cov + 2 * (matrix(runif(length(pars$inv_cov)), nrow(pars$inv_cov)) - 0.5) * a
+  new_pars$beta = as.numeric(rmvnorm(1, pars$beta, diag(a, length(pars$beta)))) #+ 2 * (runif(length(pars$beta)) - 0.5) * a
+  
+  new_pars$rho = as.numeric(rmvnorm(1, pars$rho, diag(a, length(pars$rho))))# + 2 * (runif(length(pars$rho)) - 0.5) * a
+  
+  new_pars$inv_cov = matrix(rWishart(1, 3, pars$inv_cov), nrow = 3) / 3
+  while(!is.positive.definite(new_pars$inv_cov))
+    new_pars$inv_cov = matrix(rWishart(1, 3, pars$inv_cov), nrow = 3) / 3
   
   
-  if(log(runif(1)) < log_posterior(hurrican, new_pars) - log_posterior(hurrican,pars))
+  #pars$inv_cov + 2 * (matrix(runif(length(pars$inv_cov)), nrow(pars$inv_cov)) - 0.5) * a
+  #return(new_pars)
+  #print(new_pars)
+#print(length(log_posterior(hurrican, new_pars)))
+  #print(length(log_posterior(hurrican, pars)))
+  Q = 1#(det(new_pars$inv_cov) / det(pars$inv_cov))
+  if(log(runif(1)) < ((log_posterior(hurrican, new_pars) - log_posterior(hurrican,pars)) * Q))
     return(new_pars)
   else
     return(pars)
@@ -142,9 +155,7 @@ log_posterior = function(hurrican, pars){
 ```
 
 ```{r}
-MCMC = function(hurrican, num_samples = 10, sample_gap = 10, a = 10, pars_init, burn_in_init = 1000, burn_in_test = 300){
-    if (is.null(k))
-      k = burn_in_add
+MCMC = function(hurrican, num_samples = 10, sample_gap = 1, a = 3, pars_init, burn_in_init = 1000, burn_in_test = 300){
     burn_in = burn_in_init
     pars = pars_init
     chain_beta <- matrix(NA, num_samples, length(pars$beta))
@@ -166,14 +177,14 @@ MCMC = function(hurrican, num_samples = 10, sample_gap = 10, a = 10, pars_init, 
     while(T){
       chain_test_num = chain_test_num + 1
       chain_mcmc <- matrix(NA, burn_in_test, length(pars$beta))
-      for (i in 1:burn_in_test * sample_gap) {
+      for (i in 1:burn_in_test) {
         
         pars <- regularMHstep(hurrican, a, logp = log_posterior, pars = pars)
-        if(i %% sample_gap == 0)
-          chain_mcmc[i %/% sample_gap,] = pars$beta
+        
+        chain_mcmc[i,] = pars$beta
       }
       chain_beta_test[[chain_test_num]]=  mcmc(chain_mcmc)
-      if (chain_test_num > 2)
+      if (chain_test_num >= 10)
         return(chain_beta_test)
       
       
@@ -226,11 +237,11 @@ MCMC = function(hurrican, num_samples = 10, sample_gap = 10, a = 10, pars_init, 
 
 pars = list(
     beta = rep(0, 21),
-    inv_cov = matrix(rep(0, 9), nrow = 3),
+    inv_cov = diag(1, 3),
     rho = rep(0, 3)
 )
 
-chain_beta = MCMC(hurrican = hurrican, pars_init = pars, burn_in_init = 10000)
+chain_beta = MCMC(hurrican = hurrican, pars_init = pars, burn_in_init = 100000, a = 1e-2)
 gelman.diag(chain_beta)
 length(unique(chain_beta[, 1])) / (nrow(chain_beta))
 
