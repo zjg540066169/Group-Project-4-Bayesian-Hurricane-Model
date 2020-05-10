@@ -252,22 +252,36 @@ acf(chain_beta[,1])
 
 library(caret)
 
-full_data <- NULL
-for (i in levels(factor(dt$id))){
+set.seed(1)
+
+id = levels(factor(dt$id))
+
+rowTrain = sample.int(length(id), round(length(id)*0.8))
+train_id = id[rowTrain]
+test_id = id[-rowTrain]
+
+train_data <- NULL
+
+for (i in train_id){
   hurrican = filter(dt, id==i)
   if (nrow(hurrican)>=3) {
     hurrican = data_process(hurrican)
-    if (is.null(full_data)) {full_data=hurrican}
-    else {full_data=rbind(full_data,hurrican)}
+    if (is.null(train_data)) {train_data=hurrican}
+    else {train_data=rbind(train_data,hurrican)}
   }
 }
 
-rowTrain <- createDataPartition(y = full_data$y_1,
-                                p = 0.8,
-                                list = FALSE)
+test_data <- NULL
 
-train_data <- full_data[rowTrain,]
-test_data <- full_data[-rowTrain,]
+for (i in test_id){
+  hurrican = filter(dt, id==i)
+  if (nrow(hurrican)>=3) {
+    hurrican = data_process(hurrican)
+    if (is.null(test_data)) {test_data=hurrican}
+    else {test_data=rbind(test_data,hurrican)}
+  }
+}
+
 
 # hurrican = test_data
 
