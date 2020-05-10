@@ -241,7 +241,7 @@ pars = list(
     rho = rep(0, 3)
 )
 
-chain_beta = MCMC(hurrican = hurrican, pars_init = pars, burn_in_init = 100000, a = 1e-2)
+chain_beta = MCMC(hurrican = hurrican, pars_init = pars, burn_in_init = 3000, a = 2e-1)
 gelman.diag(chain_beta)
 length(unique(chain_beta[, 1])) / (nrow(chain_beta))
 
