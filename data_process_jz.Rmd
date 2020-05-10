@@ -247,3 +247,67 @@ length(unique(chain_beta[, 1])) / (nrow(chain_beta))
 
 acf(chain_beta[,1])
 ```
+
+```{r evaluation}
+
+library(caret)
+
+full_data <- NULL
+for (i in levels(factor(dt$id))){
+  hurrican = filter(dt, id==i)
+  if (nrow(hurrican)>=3) {
+    hurrican = data_process(hurrican)
+    if (is.null(full_data)) {full_data=hurrican}
+    else {full_data=rbind(full_data,hurrican)}
+  }
+}
+
+rowTrain <- createDataPartition(y = full_data$y_1,
+                                p = 0.8,
+                                list = FALSE)
+
+train_data <- full_data[rowTrain,]
+test_data <- full_data[-rowTrain,]
+
+# hurrican = test_data
+
+
+#### Find Posterior Mean of Parameters ####
+
+model_evaluation <- function(hurrican, pars, d_crit=10000){
+  y_plus_6 = select(hurrican,  y_plus_6_1, y_plus_6_2, y_plus_6_3)
+  y_plus_6 = as.matrix(y_plus_6)
+  x1 = select(hurrican,  x_1, x_2, x_3, delta_1, delta_2, delta_3) %>% as.matrix()
+  x2 = select(hurrican,  x_1, x_2, x_3, delta_1, delta_2, delta_3) %>% as.matrix()
+  x3 = select(hurrican,  x_1, x_2, x_3, delta_1, delta_2, delta_3) %>% as.matrix()
+  x1 = cbind(1, x1)
+  x2 = cbind(1, x2)
+  x3 = cbind(1, x3)
+  
+  mu_1 = x1 %*% pars$beta[1:7]
+  mu_2 = x2 %*% pars$beta[8:14]
+  mu_3 = x3 %*% pars$beta[15:21]
+  
+  rho_y1 = select(hurrican, y_1) %>% as.matrix() * pars$rho[1]
+  rho_y2 = select(hurrican, y_2) %>% as.matrix() * pars$rho[2]
+  rho_y3 = select(hurrican, y_3) %>% as.matrix() * pars$rho[3]
+  
+  y_1 = mu_1 + rho_y1
+  y_2 = mu_2 + rho_y2
+  y_3 = mu_3 + rho_y3
+  
+  
+  d = (hurrican$y_plus_6_1-y_1)^2+(hurrican$y_plus_6_2-y_2)^2
+  d = na.omit(d)
+  acc = ifelse(d<d_crit,1,0)
+  acc = mean(acc)
+  hinge = ifelse(d<d_crit,0,d-d_crit)
+  
+  hist(d)
+  hist(hinge)
+  
+}
+  
+
+
+```
