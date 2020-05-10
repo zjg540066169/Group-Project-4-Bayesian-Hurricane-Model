@@ -31,18 +31,25 @@ dt = read.csv("./hurrican356.csv") %>%
          ) %>% 
   group_by(id) %>% 
   mutate(hour = time - time[1],
-         calenda_year = as.integer(as.factor(calenda_year))
-         )
+         calenda_year = as.integer(as.factor(calenda_year)))
 
 units(dt$hour) <- "hours"
 dt = dt %>% 
-  mutate(
-    hour = as.integer(hour),
-    nature = as.integer(nature)
-    ) %>% 
+  mutate(hour = as.integer(hour)) %>% 
   ungroup() %>% 
   filter(hour %% 6 == 0)
-         
+nature = fastDummies::dummy_cols(dt$nature)  
+dt = dt %>% 
+  cbind(nature) %>% 
+  rename(
+    "ds" = ".data_DS",
+    "et" = ".data_ET",
+    "nr" = ".data_NR",
+    "ss" = ".data_SS",
+    "ts" = ".data_TS"
+  ) %>% 
+  select(-".data")
+    
         
 hurrican = filter(dt, hurrican == "DEAN")
 ```
@@ -54,7 +61,7 @@ hurrican = filter(dt, hurrican == "DEAN")
 ```{r }
 
 data_process = function(hurrican){
-  #hurrican = mutate(hurrican, ) 
+  hurrican = mutate(hurrican, season = season - min(season)) 
   y_plus_6_1 = group_by(hurrican, calenda_year) %>% slice(3:n()) %>% ungroup() %>% select(latitude) %>% rename(y_plus_6_1 = latitude)
   y_plus_6_2 = group_by(hurrican, calenda_year) %>% slice(3:n()) %>% ungroup() %>% select(longitude) %>% rename(y_plus_6_2 = longitude)
   y_plus_6_3 = group_by(hurrican, calenda_year) %>% slice(3:n()) %>% ungroup() %>% select(wind_kt) %>% rename(y_plus_6_3 = wind_kt)
@@ -72,11 +79,15 @@ data_process = function(hurrican){
   delta_3 = (y_3 - y_minus_6_3) %>% rename(delta_3 = y_3)
   
   x_1 = group_by(hurrican, calenda_year) %>% slice(2:(n() - 1)) %>% ungroup() %>% select(day) %>% rename(x_1 = day)
-  x_2 = group_by(hurrican, calenda_year) %>% slice(2:(n() - 1)) %>% ungroup() %>% select(calenda_year) %>% rename(x_2 = calenda_year)
-  x_3 = group_by(hurrican, calenda_year) %>% slice(2:(n() - 1)) %>% ungroup() %>% select(nature) %>% rename(x_3 = nature)
+  x_2 = group_by(hurrican, calenda_year) %>% slice(2:(n() - 1)) %>% ungroup() %>% select(season) %>% rename(x_2 = season)
+  x_3_ds = group_by(hurrican, calenda_year) %>% slice(2:(n() - 1)) %>% ungroup() %>% select(ds) %>% rename(x_3_ds = ds)
+  x_3_et = group_by(hurrican, calenda_year) %>% slice(2:(n() - 1)) %>% ungroup() %>% select(et) %>% rename(x_3_et = et)
+  x_3_nr = group_by(hurrican, calenda_year) %>% slice(2:(n() - 1)) %>% ungroup() %>% select(nr) %>% rename(x_3_nr = nr)
+  x_3_ss = group_by(hurrican, calenda_year) %>% slice(2:(n() - 1)) %>% ungroup() %>% select(ss) %>% rename(x_3_ss = ss)
+  x_3_ts = group_by(hurrican, calenda_year) %>% slice(2:(n() - 1)) %>% ungroup() %>% select(ts) %>% rename(x_3_ts = ts)
   
   df = cbind(
-    y_1, y_2, y_3, delta_1, delta_2, delta_3, x_1, x_2, x_3, y_plus_6_1, y_plus_6_2, y_plus_6_3
+    y_1, y_2, y_3, delta_1, delta_2, delta_3, x_1, x_2, x_3_ds, x_3_et, x_3_nr, x_3_ss,  x_3_ts, y_plus_6_1, y_plus_6_2, y_plus_6_3
   )
   df
 }
@@ -86,8 +97,11 @@ data_process = function(hurrican){
 ```
 
 ```{r}
-hurrican = data_process(hurrican)
-
+hurrican = data_process(dt)
+#x = select(hurrican, -y_1, -y_2, -y_3)
+#x = scale(x)
+#y = select(hurrican, y_1, y_2, y_3)
+#hurrican = cbind(y, x)
 ```
 
 
@@ -111,6 +125,7 @@ regularMHstep <- function(hurrican, a, logp, pars){
 #print(length(log_posterior(hurrican, new_pars)))
   #print(length(log_posterior(hurrican, pars)))
   Q = 1#(det(new_pars$inv_cov) / det(pars$inv_cov))
+  #print((exp(log_posterior(hurrican, new_pars) - log_posterior(hurrican,pars))))
   if(log(runif(1)) < ((log_posterior(hurrican, new_pars) - log_posterior(hurrican,pars)) * Q))
     return(new_pars)
   else
@@ -121,16 +136,16 @@ regularMHstep <- function(hurrican, a, logp, pars){
 log_posterior = function(hurrican, pars){
   y_plus_6 = select(hurrican,  y_plus_6_1, y_plus_6_2, y_plus_6_3)
   y_plus_6 = as.matrix(y_plus_6)
-  x1 = select(hurrican,  x_1, x_2, x_3, delta_1, delta_2, delta_3) %>% as.matrix()
-  x2 = select(hurrican,  x_1, x_2, x_3, delta_1, delta_2, delta_3) %>% as.matrix()
-  x3 = select(hurrican,  x_1, x_2, x_3, delta_1, delta_2, delta_3) %>% as.matrix()
+  x1 = select(hurrican,  x_1, x_2, x_3_ds, x_3_et, x_3_nr, x_3_ss,  x_3_ts, delta_1, delta_2, delta_3) %>% as.matrix()
+  x2 = select(hurrican,  x_1, x_2, x_3_ds, x_3_et, x_3_nr, x_3_ss,  x_3_ts, delta_1, delta_2, delta_3) %>% as.matrix()
+  x3 = select(hurrican,  x_1, x_2, x_3_ds, x_3_et, x_3_nr, x_3_ss,  x_3_ts, delta_1, delta_2, delta_3) %>% as.matrix()
   x1 = cbind(1, x1)
   x2 = cbind(1, x2)
   x3 = cbind(1, x3)
-  
-  mu_1 = x1 %*% pars$beta[1:7]
-  mu_2 = x2 %*% pars$beta[8:14]
-  mu_3 = x3 %*% pars$beta[15:21]
+  #print(ncol(x1))
+  mu_1 = x1 %*% pars$beta[1:11]
+  mu_2 = x2 %*% pars$beta[12:22]
+  mu_3 = x3 %*% pars$beta[23:33]
   
   rho_y1 = select(hurrican, y_1) %>% as.matrix() * pars$rho[1]
   rho_y2 = select(hurrican, y_2) %>% as.matrix() * pars$rho[2]
@@ -184,7 +199,9 @@ MCMC = function(hurrican, num_samples = 10, sample_gap = 1, a, pars_init, burn_i
         chain_mcmc[i,] = pars$beta
       }
       chain_beta_test[[chain_test_num]]=  mcmc(chain_mcmc)
-      if (chain_test_num >= 10){
+      if (chain_test_num >= 2){
+        #return(chain_beta_test)
+        print(paste("gelman statistics:", gelman.diag(chain_beta_test)$mpsrf))
         if(gelman.diag(chain_beta_test)$mpsrf < 4){
           print("burn in over")
           break
@@ -252,7 +269,7 @@ MCMC = function(hurrican, num_samples = 10, sample_gap = 1, a, pars_init, burn_i
 }
 
 pars = list(
-    beta = rep(0, 21),
+    beta = rep(0, 33),
     inv_cov = diag(1, 3),
     rho = rep(0, 3)
 )
@@ -307,16 +324,15 @@ for (i in test_id){
 model_evaluation <- function(hurrican, pars, d_crit=10000){
   y_plus_6 = select(hurrican,  y_plus_6_1, y_plus_6_2, y_plus_6_3)
   y_plus_6 = as.matrix(y_plus_6)
-  x1 = select(hurrican,  x_1, x_2, x_3, delta_1, delta_2, delta_3) %>% as.matrix()
-  x2 = select(hurrican,  x_1, x_2, x_3, delta_1, delta_2, delta_3) %>% as.matrix()
-  x3 = select(hurrican,  x_1, x_2, x_3, delta_1, delta_2, delta_3) %>% as.matrix()
+  x1 = select(hurrican,  x_1, x_2, x_3_ds, x_3_et, x_3_nr, x_3_ss,  x_3_ts, delta_1, delta_2, delta_3) %>% as.matrix()
+  x2 = select(hurrican,  x_1, x_2, x_3_ds, x_3_et, x_3_nr, x_3_ss,  x_3_ts, delta_1, delta_2, delta_3) %>% as.matrix()
+  x3 = select(hurrican,  x_1, x_2, x_3_ds, x_3_et, x_3_nr, x_3_ss,  x_3_ts, delta_1, delta_2, delta_3) %>% as.matrix()
   x1 = cbind(1, x1)
   x2 = cbind(1, x2)
   x3 = cbind(1, x3)
-  
-  mu_1 = x1 %*% pars$beta[1:7]
-  mu_2 = x2 %*% pars$beta[8:14]
-  mu_3 = x3 %*% pars$beta[15:21]
+  mu_1 = x1 %*% pars$beta[1:11]
+  mu_2 = x2 %*% pars$beta[12:22]
+  mu_3 = x3 %*% pars$beta[23:33]
   
   rho_y1 = select(hurrican, y_1) %>% as.matrix() * pars$rho[1]
   rho_y2 = select(hurrican, y_2) %>% as.matrix() * pars$rho[2]
