@@ -44,7 +44,7 @@ dt = dt %>%
   filter(hour %% 6 == 0)
          
         
-hurrican = filter(dt, hurrican == "ALLISON")
+hurrican = filter(dt, hurrican == "DEAN")
 ```
 
 ## Data Process
@@ -155,7 +155,7 @@ log_posterior = function(hurrican, pars){
 ```
 
 ```{r}
-MCMC = function(hurrican, num_samples = 10, sample_gap = 1, a = 3, pars_init, burn_in_init = 1000, burn_in_test = 300){
+MCMC = function(hurrican, num_samples = 10, sample_gap = 1, a, pars_init, burn_in_init = 1000, burn_in_test = 300){
     burn_in = burn_in_init
     pars = pars_init
     chain_beta <- matrix(NA, num_samples, length(pars$beta))
@@ -184,12 +184,21 @@ MCMC = function(hurrican, num_samples = 10, sample_gap = 1, a = 3, pars_init, bu
         chain_mcmc[i,] = pars$beta
       }
       chain_beta_test[[chain_test_num]]=  mcmc(chain_mcmc)
-      if (chain_test_num >= 10)
-        return(chain_beta_test)
-      
+      if (chain_test_num >= 10){
+        if(gelman.diag(chain_beta_test)$mpsrf < 4){
+          print("burn in over")
+          break
+        }
+        
+        else{
+          print("burn in restart")
+          chain_beta_test = mcmc.list()
+          chain_test_num = 0
+        }
+      }
       
     }
-    
+    print("generate start")
     
     while (current_sample_num <= num_samples){
       pars <- regularMHstep(hurrican, a, logp = log_posterior, pars = pars)
@@ -223,15 +232,22 @@ MCMC = function(hurrican, num_samples = 10, sample_gap = 1, a = 3, pars_init, bu
       #}
       #else 
       if(step %% sample_gap == 0){
-        chain_beta[(step) %/% sample_gap, ] = pars$beta
-        chain_rho[(step) %/% sample_gap, ] = pars$rho
-        chain_inv_cov[(step) %/% sample_gap, ,] = pars$inv_cov
+        if (current_sample_num %% 100 == 0)
+          print(paste(current_sample_num, num_samples))
+        chain_beta[current_sample_num, ] = pars$beta
+        chain_rho[current_sample_num, ] = pars$rho
+        chain_inv_cov[current_sample_num, ,] = pars$inv_cov
         current_sample_num = current_sample_num + 1
       }
       
       step = step + 1
     }
-  return(mcmc(chain_beta))
+  pars_list = list(
+    beta_matrix = chain_beta,
+    rho_matrix = chain_rho,
+    inv_cov_matrix = chain_inv_cov
+  )
+  return(pars_list)
   
 }
 
@@ -241,11 +257,11 @@ pars = list(
     rho = rep(0, 3)
 )
 
-chain_beta = MCMC(hurrican = hurrican, pars_init = pars, burn_in_init = 3000, a = 2e-1)
-gelman.diag(chain_beta)
-length(unique(chain_beta[, 1])) / (nrow(chain_beta))
+chain_samples = MCMC(hurrican = hurrican, pars_init = pars, num_samples = 1000, sample_gap = 30, burn_in_init = 3000, a = 2e-1)
 
-acf(chain_beta[,1])
+#length(unique(chain_samples$beta_matrix[, 1])) / (nrow(chain_samples$beta_matrix))
+
+#acf(chain_beta[,1])
 ```
 
 ```{r evaluation}
