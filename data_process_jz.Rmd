@@ -170,7 +170,7 @@ log_posterior = function(hurrican, pars){
 ```
 
 ```{r}
-MCMC = function(hurrican, num_samples = 10, sample_gap = 1, a, pars_init, burn_in_init = 1000, burn_in_test = 300){
+MCMC = function(hurrican, num_samples = 10, sample_gap = 1, a, pars_init, burn_in_init = 1000, burn_in_test = 300, burn_in_restart = 4){
     burn_in = burn_in_init
     pars = pars_init
     chain_beta <- matrix(NA, num_samples, length(pars$beta))
@@ -202,7 +202,7 @@ MCMC = function(hurrican, num_samples = 10, sample_gap = 1, a, pars_init, burn_i
       if (chain_test_num >= 2){
         #return(chain_beta_test)
         print(paste("gelman statistics:", gelman.diag(chain_beta_test)$mpsrf))
-        if(gelman.diag(chain_beta_test)$mpsrf < 4){
+        if(gelman.diag(chain_beta_test)$mpsrf < burn_in_restart){
           print("burn in over")
           break
         }
@@ -268,13 +268,9 @@ MCMC = function(hurrican, num_samples = 10, sample_gap = 1, a, pars_init, burn_i
   
 }
 
-pars = list(
-    beta = rep(0, 33),
-    inv_cov = diag(1, 3),
-    rho = rep(0, 3)
-)
 
-chain_samples = MCMC(hurrican = hurrican, pars_init = pars, num_samples = 1000, sample_gap = 30, burn_in_init = 3000, a = 2e-1)
+
+
 
 #length(unique(chain_samples$beta_matrix[, 1])) / (nrow(chain_samples$beta_matrix))
 
@@ -316,9 +312,19 @@ for (i in test_id){
 }
 
 
+pars = list(
+    beta = rep(0, 33),
+    inv_cov = diag(1, 3),
+    rho = rep(0, 3)
+)
+
+chain_samples = MCMC(hurrican = train_data, pars_init = pars, num_samples = 100, sample_gap = 30, burn_in_init = 5000, a = 2e-2, burn_in_restart = 100)
+
 # hurrican = test_data
-
-
+pars = list(
+  beta = colMeans(chain_samples$beta_matrix),
+  rho = colMeans(chain_samples$rho_matrix),
+  inv_cov_matrix = colMeans(chain_samples$inv_cov_matrix))
 #### Find Posterior Mean of Parameters ####
 
 model_evaluation <- function(hurrican, pars, d_crit=10000){
@@ -354,6 +360,6 @@ model_evaluation <- function(hurrican, pars, d_crit=10000){
   
 }
   
-
+model_evaluation(test_data, pars)
 
 ```
