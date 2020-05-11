@@ -124,7 +124,7 @@ regularMHstep <- function(hurrican, a, logp, pars){
   #print(new_pars)
 #print(length(log_posterior(hurrican, new_pars)))
   #print(length(log_posterior(hurrican, pars)))
-  Q = 1#(det(new_pars$inv_cov) / det(pars$inv_cov))
+  Q = (det(new_pars$inv_cov) / det(pars$inv_cov))
   #print((exp(log_posterior(hurrican, new_pars) - log_posterior(hurrican,pars))))
   if(log(runif(1)) < ((log_posterior(hurrican, new_pars) - log_posterior(hurrican,pars)) * Q))
     return(new_pars)
