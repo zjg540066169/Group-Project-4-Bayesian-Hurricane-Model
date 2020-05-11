@@ -51,7 +51,7 @@ dt = dt %>%
   select(-".data")
     
         
-hurrican = filter(dt, hurrican == "DEAN")
+#hurrican = filter(dt, hurrican == "DEAN")
 ```
 
 ## Data Process
@@ -108,6 +108,7 @@ hurrican = data_process(dt)
 ## MCMC
 
 ```{r}
+
 regularMHstep <- function(hurrican, a, logp, pars){
   new_pars = list()
   new_pars$beta = as.numeric(rmvnorm(1, pars$beta, diag(a, length(pars$beta)))) #+ 2 * (runif(length(pars$beta)) - 0.5) * a
@@ -318,7 +319,7 @@ pars = list(
     rho = rep(0, 3)
 )
 
-chain_samples = MCMC(hurrican = train_data, pars_init = pars, num_samples = 100, sample_gap = 30, burn_in_init = 5000, a = 2e-3, burn_in_restart = 100)
+chain_samples = MCMC(hurrican = train_data, pars_init = pars, num_samples = 100, sample_gap = 30, burn_in_init = 5000, a = 8e-3, burn_in_restart = 100)
 
 # hurrican = test_data
 pars = list(
