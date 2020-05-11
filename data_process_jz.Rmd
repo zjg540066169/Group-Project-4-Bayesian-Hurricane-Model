@@ -318,7 +318,7 @@ pars = list(
     rho = rep(0, 3)
 )
 
-chain_samples = MCMC(hurrican = train_data, pars_init = pars, num_samples = 100, sample_gap = 30, burn_in_init = 5000, a = 2e-2, burn_in_restart = 100)
+chain_samples = MCMC(hurrican = train_data, pars_init = pars, num_samples = 100, sample_gap = 30, burn_in_init = 5000, a = 2e-3, burn_in_restart = 100)
 
 # hurrican = test_data
 pars = list(
@@ -360,6 +360,6 @@ model_evaluation <- function(hurrican, pars, d_crit=10000){
   
 }
   
-model_evaluation(test_data, pars)
+model_evaluation(test_data, pars, d_crit = 20)
 
 ```
